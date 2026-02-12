@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
@@ -262,7 +263,6 @@ const Messages: React.FC = () => {
     }, [location.state]);
 
     // Fetch Conversation List (Optimized)
-    // In a real app this would also be a subscription, but keeping it simple for now as per prompt instructions targeting Messages list.
     // --- REACT QUERY FOR CONVERSATIONS ---
     const { data: conversationData } = useQuery({
         queryKey: ['conversations', user?.uid],
@@ -284,7 +284,7 @@ const Messages: React.FC = () => {
 
             return { chatUsers: filtered, unreadCounts: convSummary };
         },
-        refetchInterval: 10000, // Smart polling (only when focused)
+        refetchInterval: 60000, // Reduced to 60s to save quota
         staleTime: 1000 * 60 * 5, // 5 minutes cache
         enabled: !!user
     });

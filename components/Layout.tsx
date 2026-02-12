@@ -7,7 +7,8 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { db } from '../services/db';
 import { getProfileStatus, SystemMessage } from '../types';
 import { getUserAvatar } from '../utils/placeholders';
-import { Shield, LayoutDashboard, Search, MessageCircle, Settings, LogOut, Menu, Sun, Moon, Server, Heart, Sparkles, UserCog, PencilRuler, UserCheck, Flame, AlertTriangle, Clock, Megaphone, Layout as LayoutIcon, X, AlertCircle, Info } from 'lucide-react';
+import { Shield, LayoutDashboard, Search, MessageCircle, Settings, LogOut, Menu, Sun, Moon, Server, Heart, Sparkles, UserCog, PencilRuler, UserCheck, Flame, AlertTriangle, Clock, Megaphone, Layout as LayoutIcon, X, AlertCircle, Info, Download } from 'lucide-react';
+// import { usePwaInstall } from '../hooks/usePwaInstall'; // Removed from here as it is used in the page
 
 const LoveLinkLogo = (props: any) => (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
@@ -52,6 +53,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     const { user, logout, error, clearError } = useAuth();
     const { currentTenant } = useTenant();
     const { isDark, toggleTheme } = useTheme();
+    // const { isInstallable, install } = usePwaInstall(); // Moved logic to page
     const location = useLocation();
     const navigate = useNavigate();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -122,19 +124,24 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               }
           });
 
-          // Polling for Incoming Likes (Complex query, keep polling but lighter)
+          // Polling for Incoming Likes (Optimized for Quota)
           const checkLikes = async () => {
-              if (user.tenantId) {
-                  const allUsers = await db.getAllUsers(user.tenantId);
-                  const incoming = allUsers.filter(u => 
-                      u.likedUserIds?.includes(user.uid) && 
+              try {
+                  // Targeted query: only get users who liked me
+                  const usersWhoLikedMe = await db.getUsersWhoLikedMe(user.uid);
+                  
+                  // Filter out users I have already liked back (matches)
+                  const incoming = usersWhoLikedMe.filter(u => 
                       !user.likedUserIds?.includes(u.uid)
                   );
                   setIncomingLikesCount(incoming.length);
+              } catch (e) {
+                  console.warn("Failed to check likes", e);
               }
           };
           checkLikes();
-          const intervalLikes = setInterval(checkLikes, 10000);
+          // Poll every 60 seconds instead of 10 to save read quota
+          const intervalLikes = setInterval(checkLikes, 60000);
 
           return () => {
               unsubMessages();
@@ -290,6 +297,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   <NavItem to="/tenant/profile" icon={Settings} label="Impostazioni" />
                 </>
               )}
+              
+              {/* Always show Install App link in menu, removed conditional button logic */}
+              <NavItem to="/tenant/install" icon={Download} label="Installa App" />
             </nav>
             
             <div className="px-6 py-4 border-t border-gray-200/10 dark:border-night-700">

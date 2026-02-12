@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
@@ -17,6 +18,7 @@ import Messages from './pages/tenant/Messages';
 import LikesReceived from './pages/tenant/LikesReceived';
 import MyLikes from './pages/tenant/MyLikes';
 import MyMatches from './pages/tenant/MyMatches';
+import InstallApp from './pages/tenant/InstallApp'; // NEW IMPORT
 import { LandingPage } from './pages/LandingPage';
 import { AuthPage } from './pages/AuthPage';
 import { TermsPage } from './pages/legal/TermsPage';
@@ -149,6 +151,11 @@ const App: React.FC = () => {
                   <Route path="/tenant/my-matches" element={
                     <RequireAuth>
                       <Layout><MyMatches /></Layout>
+                    </RequireAuth>
+                  } />
+                  <Route path="/tenant/install" element={
+                    <RequireAuth>
+                      <Layout><InstallApp /></Layout>
                     </RequireAuth>
                   } />
 

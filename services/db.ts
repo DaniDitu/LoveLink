@@ -1,3 +1,4 @@
+
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { 
   getFirestore, Firestore, collection, doc, getDoc, getDocs, 
@@ -239,12 +240,12 @@ class DBService {
       const unsub1 = onSnapshot(q1, (snap) => {
           msgs1 = snap.docs.map(d => d.data() as Message);
           update();
-      });
+      }, (error) => console.error("subscribeToMessages q1 error:", error));
 
       const unsub2 = onSnapshot(q2, (snap) => {
           msgs2 = snap.docs.map(d => d.data() as Message);
           update();
-      });
+      }, (error) => console.error("subscribeToMessages q2 error:", error));
 
       return () => { unsub1(); unsub2(); };
   }
@@ -309,7 +310,7 @@ class DBService {
       return onSnapshot(q, snap => {
           const count = snap.docs.filter(d => !(d.data() as Message).isDeleted).length;
           callback(count);
-      });
+      }, (error) => console.error("subscribeToUnreadCount error:", error));
   }
 
   // --- Reports ---
@@ -336,11 +337,11 @@ class DBService {
       await updateDoc(doc(this.db!, 'reports', id), { status });
   }
 
-  // --- System Messages ---
+  // --- System Messages (Announcements) ---
 
   async getSystemMessages(): Promise<SystemMessage[]> {
       this.checkDb();
-      const q = query(collection(this.db!, 'system_messages'));
+      const q = query(collection(this.db!, 'system_announcements'));
       const snap = await getDocs(q);
       return snap.docs.map(d => d.data() as SystemMessage);
   }
@@ -349,28 +350,28 @@ class DBService {
       this.checkDb();
       let q;
       if (activeOnly) {
-          q = query(collection(this.db!, 'system_messages'), where('isActive', '==', true));
+          q = query(collection(this.db!, 'system_announcements'), where('isActive', '==', true));
       } else {
-          q = collection(this.db!, 'system_messages');
+          q = collection(this.db!, 'system_announcements');
       }
       return onSnapshot(q, snap => {
           callback(snap.docs.map(d => d.data() as SystemMessage));
-      });
+      }, (error) => console.error("subscribeToSystemMessages error:", error));
   }
 
   async saveSystemMessage(msg: SystemMessage) {
       this.checkDb();
-      await setDoc(doc(this.db!, 'system_messages', msg.id), msg);
+      await setDoc(doc(this.db!, 'system_announcements', msg.id), msg);
   }
 
   async deleteSystemMessage(id: string) {
       this.checkDb();
-      await deleteDoc(doc(this.db!, 'system_messages', id));
+      await deleteDoc(doc(this.db!, 'system_announcements', id));
   }
   
   async republishSystemMessage(id: string) {
       this.checkDb();
-      await updateDoc(doc(this.db!, 'system_messages', id), { republishedAt: new Date().toISOString(), isActive: true });
+      await updateDoc(doc(this.db!, 'system_announcements', id), { republishedAt: new Date().toISOString(), isActive: true });
   }
 
   // --- Insertions (Ads) ---
@@ -433,7 +434,7 @@ class DBService {
       const q = query(collection(this.db!, 'photo_requests'), where(field, '==', userId));
       return onSnapshot(q, snap => {
           callback(snap.docs.map(d => d.data() as PhotoRequest));
-      });
+      }, (error) => console.error("subscribeToPhotoRequests error:", error));
   }
 
   async updatePhotoRequestStatus(id: string, status: 'APPROVED' | 'REJECTED') {
@@ -441,17 +442,19 @@ class DBService {
       await updateDoc(doc(this.db!, 'photo_requests', id), { status });
   }
 
-  // --- Config ---
+  // --- Config (System Config) ---
 
   async getLandingPageConfig(): Promise<LandingPageConfig | null> {
       this.checkDb();
-      const snap = await getDoc(doc(this.db!, 'config', 'landing_page'));
+      // Changed 'config' to 'system_config' to match rules
+      const snap = await getDoc(doc(this.db!, 'system_config', 'landing_page'));
       return snap.exists() ? (snap.data() as LandingPageConfig) : null;
   }
 
   async saveLandingPageConfig(config: LandingPageConfig) {
       this.checkDb();
-      await setDoc(doc(this.db!, 'config', 'landing_page'), config);
+      // Changed 'config' to 'system_config' to match rules
+      await setDoc(doc(this.db!, 'system_config', 'landing_page'), config);
   }
 }
 
