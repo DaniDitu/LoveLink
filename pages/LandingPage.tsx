@@ -396,12 +396,13 @@ export const LandingPage: React.FC = () => {
            
            <div className="hidden md:flex gap-6 text-sm font-medium text-slate-600 dark:text-night-200 items-center">
               {config.appVisible && <a href="#app-install" className="hover:text-rose-600 dark:hover:text-rose-400 transition-colors">Scarica App</a>}
-              <button onClick={toggleTheme} className="hover:text-rose-600 dark:hover:text-rose-400">
-                  {isDark ? <Sun className="w-4 h-4"/> : <Moon className="w-4 h-4"/>}
-              </button>
            </div>
 
            <div className="flex items-center gap-3">
+               <button onClick={toggleTheme} className="p-2 text-slate-500 hover:text-rose-600 dark:text-night-200 dark:hover:text-rose-400 transition-colors">
+                  {isDark ? <Sun className="w-5 h-5"/> : <Moon className="w-5 h-5"/>}
+               </button>
+
                {(config.navLoginVisible ?? true) && (
                    <button onClick={scrollToAuth} className="hidden sm:block px-5 py-2 rounded-full border border-slate-200 dark:border-night-700 hover:border-slate-900 dark:hover:border-night-200 hover:bg-slate-50 dark:hover:bg-night-800 transition-all font-medium text-sm">
                       Accedi
