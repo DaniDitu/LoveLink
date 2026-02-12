@@ -1,0 +1,5 @@
+{
+  "name": "LoveLink",
+  "description": "Un'architettura di piattaforma di incontri SaaS multi-tenant con un pannello di controllo Super Admin e applicazioni Tenant isolate con logiche di matching.",
+  "requestFramePermissions": []
+}

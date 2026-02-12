@@ -1,0 +1,22 @@
+{
+  "name": "LoveLink - Dating SaaS",
+  "short_name": "LoveLink",
+  "description": "La piattaforma di dating multi-tenant #1 in Italia.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#e11d48",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1077/1077035.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1077/1077035.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

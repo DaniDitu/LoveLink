@@ -1,0 +1,127 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper: Check if user is the owner of the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Helper: Check if user is a Super Admin
+    function isSuperAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'SUPER_ADMIN';
+    }
+
+    // Helper: Check if user profile is active (not suspended/banned/deleted)
+    function isUserActive() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'ACTIVE';
+    }
+
+    // --- SYSTEM CONFIG (CMS) ---
+    match /system_config/{document=**} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    // --- SYSTEM ANNOUNCEMENTS ---
+    match /system_announcements/{messageId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    // --- TENANTS COLLECTION ---
+    match /tenants/{tenantId} {
+      allow read: if true;
+      // HOTFIX: Only SuperAdmin can write tenants. Removed 'default-tenant' exception.
+      allow write: if isSuperAdmin();
+    }
+
+    // --- USERS COLLECTION ---
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      
+      // HOTFIX: Enforce ROLE and TENANT on creation.
+      // Users cannot make themselves SUPER_ADMIN or change tenant.
+      allow create: if isOwner(userId)
+        && request.resource.data.role == 'USER'
+        && request.resource.data.tenantId == 'default-tenant';
+
+      // Allow update if Owner, SuperAdmin, OR if updating only 'likedUserIds' (for Logic)
+      // Enforce that Owner cannot change their Role or TenantId
+      allow update: if isSuperAdmin() || (
+        isOwner(userId)
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.tenantId == resource.data.tenantId
+      );
+      
+      allow delete: if isSuperAdmin();
+    }
+
+    // --- MESSAGES COLLECTION ---
+    match /messages/{messageId} {
+      allow read: if isAuthenticated() && (
+        resource.data.senderId == request.auth.uid || 
+        resource.data.receiverId == request.auth.uid || 
+        isSuperAdmin()
+      );
+      
+      // HOTFIX: Only active users can send messages
+      allow create: if isAuthenticated() 
+        && isUserActive()
+        && request.resource.data.senderId == request.auth.uid;
+        
+      allow update: if isAuthenticated() && (
+        resource.data.senderId == request.auth.uid || 
+        resource.data.receiverId == request.auth.uid
+      );
+      
+      allow delete: if isSuperAdmin() || (
+        isAuthenticated() && (
+          resource.data.senderId == request.auth.uid || 
+          resource.data.receiverId == request.auth.uid
+        )
+      );
+    }
+
+    // --- REPORTS COLLECTION ---
+    match /reports/{reportId} {
+      allow create: if isAuthenticated() && request.resource.data.reporterId == request.auth.uid;
+      allow read, update, delete: if isSuperAdmin();
+    }
+
+    // --- PHOTO REQUESTS COLLECTION ---
+    match /photo_requests/{requestId} {
+      allow create: if isAuthenticated() && isUserActive() && request.resource.data.requesterId == request.auth.uid;
+      allow read: if isAuthenticated() && (
+        resource.data.requesterId == request.auth.uid || 
+        resource.data.ownerId == request.auth.uid ||
+        isSuperAdmin()
+      );
+      allow update: if isAuthenticated() && (
+        resource.data.ownerId == request.auth.uid || 
+        resource.data.requesterId == request.auth.uid ||
+        isSuperAdmin()
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    // --- INSERTIONS (ADS) COLLECTION ---
+    match /insertions/{insertionId} {
+      allow read: if isAuthenticated();
+      allow update: if isSuperAdmin() || (
+        isAuthenticated() && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likedUserIds'])
+      );
+      allow create, delete: if isSuperAdmin();
+    }
+  }
+}
