@@ -74,7 +74,7 @@ const App: React.FC = () => {
                 <Route element={<TenantScope />}>
 
                   {/* SUPER ADMIN ROUTES */}
-                  <Route path="/superadmin/*" element={
+                  <Route path="/superadmin" element={
                     <RequireAuth>
                       <RequireSuperAdmin>
                         <Layout><SuperAdminDashboard /></Layout>

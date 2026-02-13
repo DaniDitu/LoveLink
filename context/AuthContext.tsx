@@ -1,7 +1,16 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { User, UserRole, GenderType } from '../types';
 import { db, auth } from '../services/db';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged, 
+  User as FirebaseUser,
+  setPersistence,
+  browserSessionPersistence
+} from "firebase/auth";
 
 interface RegisterData {
   email: string;
@@ -48,8 +57,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const init = async () => {
       try {
         await db.initialize();
+        // Enforce Session Persistence: User is logged out when tab/browser closes
+        if (auth) {
+            await setPersistence(auth, browserSessionPersistence);
+        }
       } catch (e) {
-        console.error("DB Init error", e);
+        console.error("DB/Auth Init error", e);
       }
     };
     init();
@@ -69,50 +82,68 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (firebaseUser) {
         // Keep loading true while we fetch/subscribe to the profile
         setIsLoading(true);
+        
+        // --- SINGLE DEVICE SESSION LOGIC ---
+        // 1. Get or Create Session ID for this specific tab/window
+        let currentSessionId = sessionStorage.getItem('lovelink_session_id');
+        if (!currentSessionId) {
+            currentSessionId = `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            sessionStorage.setItem('lovelink_session_id', currentSessionId);
+            
+            // 2. Claim this session in Firestore (Self-healing on login/refresh)
+            try {
+                await db.updateUser(firebaseUser.uid, { currentSessionId });
+            } catch (e) {
+                console.warn("Failed to set session ID on login", e);
+            }
+        }
+        // -----------------------------------
+
         try {
           // Subscribe to user changes for realtime status/role updates
           const unsub = db.subscribeToUser(firebaseUser.uid, (foundUser, subscribeError) => {
             if (subscribeError) {
               console.warn("AuthContext: Snapshot error (likely offline or permission):", subscribeError);
-              // DO NOT LOGOUT. keep existing user if present, or set offline flag.
               setIsOffline(true);
-              // If we have no user data yet, we might want to try a one-off fetch or checking cache
-              // but for now, we stop loading to avoid indefinite spinner.
               setIsLoading(false);
               return;
             }
 
             setIsOffline(false);
             if (foundUser) {
+              // Check Status
               if (['SUSPENDED', 'BANNED', 'DELETED'].includes(foundUser.status || '')) {
-                // If status invalid, force sign out
                 signOut(auth).then(() => {
                   setUser(null);
                   setError("Account sospeso, bannato o cancellato.");
                 });
-              } else {
-                setUser(foundUser);
-                // Trigger immediate presence update on login/refresh
-                db.updateLastActive(foundUser.uid);
+                return;
               }
+
+              // Check Session ID (Single Device Enforcement)
+              if (foundUser.currentSessionId && foundUser.currentSessionId !== currentSessionId) {
+                  // The session ID in DB changed, meaning another device logged in
+                  // Force logout this device
+                  console.warn("Session mismatch. Logging out.");
+                  signOut(auth).then(() => {
+                      setUser(null);
+                      sessionStorage.removeItem('lovelink_session_id'); // Clear local session
+                      setError("Sessione terminata. Accesso effettuato da un altro dispositivo.");
+                  });
+                  return;
+              }
+
+              setUser(foundUser);
+              // Trigger immediate presence update on login/refresh
+              db.updateLastActive(foundUser.uid);
             } else {
-              // User exists in Auth but not in DB (or DB read fail)
-              // This might be a fresh registration that hasn't written to DB yet.
-              // Wait a bit or handle gracefully.
               console.warn("User in Auth but not in DB");
-              // We do NOT set user to null effectively logging them out immediately, 
-              // unless we are sure it's not a sync issue.
-              // However, if it's truly null (document missing), we can't do much.
-              // Let's assume valid user for now if we can't find doc? No, that's risky.
-              // Better to keep isLoading false and let them retry or see an error.
-              // setUser(null); // <--- REMOVED AUTOMATIC LOGOUT
             }
             setIsLoading(false);
           });
           unsubscribeUserRef.current = unsub;
         } catch (e) {
           console.error("Failed to fetch user profile", e);
-          // setUser(null); // <--- REMOVED AUTOMATIC LOGOUT
           setError("Errore caricamento profilo. Verifica connessione.");
           setIsLoading(false);
         }
@@ -137,8 +168,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!password) {
         throw new Error("Password richiesta per l'accesso sicuro.");
       }
+      // Persistence is set in useEffect, but we ensure it here just in case for new logins
+      await setPersistence(auth!, browserSessionPersistence);
       await signInWithEmailAndPassword(auth!, email, password);
-      // onAuthStateChanged will handle setting the user
+      // onAuthStateChanged will handle setting the user and session ID
     } catch (e: any) {
       console.error(e);
       let msg = "Errore durante il login.";
@@ -155,6 +188,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsLoading(true);
     setError(null);
     try {
+      await setPersistence(auth!, browserSessionPersistence);
+      
       // 1. Create Auth User
       const userCredential = await createUserWithEmailAndPassword(auth!, data.email, data.password);
       const firebaseUid = userCredential.user.uid;
@@ -164,8 +199,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (data.type === 'WOMAN') lookingFor = ['MAN'];
       if (data.type === 'COUPLE') lookingFor = ['MAN', 'WOMAN', 'COUPLE'];
 
-      // SECURITY FIX: Always enforce USER role and default tenant on client.
-      // The Firestore Rules will reject anything else.
+      // Generate initial session ID
+      const sessionId = `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      sessionStorage.setItem('lovelink_session_id', sessionId);
+
       const newUser: User = {
         uid: firebaseUid,
         email: data.email,
@@ -186,7 +223,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         likedUserIds: [],
         interests: [],
         joinedAt: new Date().toISOString(),
-        lastActiveAt: new Date().toISOString()
+        lastActiveAt: new Date().toISOString(),
+        currentSessionId: sessionId
       };
 
       // 3. Save to Firestore
@@ -211,6 +249,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Explicitly clear state immediately to update UI
       setUser(null);
       setIsLoading(false);
+      sessionStorage.removeItem('lovelink_session_id'); // Clear session token
+      
       if (unsubscribeUserRef.current) {
         unsubscribeUserRef.current();
         unsubscribeUserRef.current = undefined;

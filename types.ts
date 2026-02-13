@@ -73,6 +73,7 @@ export interface User {
   isVerified?: boolean;
   joinedAt?: string; // ISO Date string for "New" badge logic
   lastActiveAt?: string; // NEW: ISO Date string for Presence System
+  currentSessionId?: string; // NEW: Track single device session
 
   // Physical Attributes & Details (Partner 1 or Single User)
   height?: number; // in cm
